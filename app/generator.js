@@ -1,5 +1,10 @@
 import { CONFIG } from "./config.js";
 
+// Утилита для выбора случайного элемента
+function randomChoice(arr) {
+  return arr[Math.floor(Math.random() * arr.length)];
+}
+
 function splitRoom(x, z, width, depth, rooms = []) {
   if (rooms.length >= CONFIG.MAX_SUBROOMS) return rooms;
 
@@ -25,35 +30,6 @@ function splitRoom(x, z, width, depth, rooms = []) {
 
   return rooms;
 }
-
-// Утилита для выбора случайного элемента
-function randomChoice(arr) {
-  return arr[Math.floor(Math.random() * arr.length)];
-}
-
-  if (rooms.length >= CONFIG.MAX_SUBROOMS) return rooms;
-
-  // если область слишком маленькая — создаём комнату
-  if (width <= CONFIG.MIN_ROOM_SIZE * 2 || depth <= CONFIG.MIN_ROOM_SIZE * 2) {
-    rooms.push({ x, z, width, depth });
-    return rooms;
-  }
-
-  const splitHorizontally = Math.random() > 0.5;
-
-  if (splitHorizontally && width > CONFIG.MIN_ROOM_SIZE * 2) {
-    const split = CONFIG.MIN_ROOM_SIZE + Math.random() * (width - CONFIG.MIN_ROOM_SIZE*2);
-    splitRoom(x - width/2 + split/2, z, split, depth, rooms);
-    splitRoom(x + split/2, z, width - split, depth, rooms);
-  } else if (!splitHorizontally && depth > CONFIG.MIN_ROOM_SIZE * 2) {
-    const split = CONFIG.MIN_ROOM_SIZE + Math.random() * (depth - CONFIG.MIN_ROOM_SIZE*2);
-    splitRoom(x, z - depth/2 + split/2, width, split, rooms);
-    splitRoom(x, z + split/2, width, depth - split, rooms);
-  } else {
-    rooms.push({ x, z, width, depth });
-  }
-
-  return rooms;}
 
 export function generateRoom() {
   const { FLOOR_SIZE, N_CELLS, PERLIN } = CONFIG;
