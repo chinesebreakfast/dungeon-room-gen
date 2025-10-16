@@ -1,26 +1,27 @@
-// src/main.js
-import { Renderer } from "./render.js";
-import { Dungeon } from "./dungeon.js";
-
-let renderer;
-let dungeon;
+import { Renderer } from "./renderer.js";
+import { Room } from "./room.js";
+import { generateWalls } from "./wallGenerator.js";
 
 window.addEventListener("DOMContentLoaded", () => {
-  renderer = new Renderer("renderCanvas");
-  renderer.run();
+  const roomWidthInput = document.getElementById("roomWidth");
+  const roomHeightInput = document.getElementById("roomHeight");
+  const generateBtn = document.getElementById("generateBtn");
 
-  document.getElementById("generateBtn").addEventListener("click", () => {
-    generateDungeon();
-  });
+  let room = new Room(parseInt(roomWidthInput.value), parseInt(roomHeightInput.value));
+  const renderer = new Renderer("renderCanvas", room);
 
-  generateDungeon(); // генерация при запуске
+  async function generateRoom() {
+    room = new Room(parseInt(roomWidthInput.value), parseInt(roomHeightInput.value));
+    renderer.room = room;
+
+    renderer.clearScene();
+    room.fillWithFloor();
+    await renderer.fillRoom();
+
+    // Добавляем стены
+    generateWalls(room, renderer);
+  }
+
+  generateBtn.addEventListener("click", generateRoom);
+  generateRoom();
 });
-
-function generateDungeon() {
-  const roomCount = parseInt(document.getElementById("roomsCount").value);
-  const seed = parseInt(document.getElementById("seed").value);
-
-  dungeon = new Dungeon(seed, { roomCountPerLevel: roomCount, levelCount: 3 });
-  dungeon.generate();
-  renderer.renderDungeon(dungeon);
-}

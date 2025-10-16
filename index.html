@@ -1,29 +1,35 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <title>Procedural Dungeon Generator</title>
-  <style>
-    body { margin: 0; overflow: hidden; background: #0b0b0b; color: #fff; font-family: sans-serif; }
-    #renderCanvas { width: 100vw; height: 100vh; display: block; }
-    #ui-panel {
-      position: absolute; top: 10px; right: 10px;
-      background: rgba(20,20,20,0.8); padding: 10px; border-radius: 8px;
-    }
-    #ui-panel input, #ui-panel button { width: 100%; margin-bottom: 8px; }
-  </style>
+<meta charset="UTF-8">
+<title>Room Prototype</title>
+<style>
+  body { margin:0; background:#ddd; overflow:hidden; font-family:sans-serif; }
+  #renderCanvas { width:100vw; height:100vh; display:block; }
+
+  #ui {
+    position:absolute; top:10px; right:10px;
+    width:220px; padding:10px;
+    background:rgba(255,255,255,0.85);
+    border-radius:8px; font-size:14px; color:#000;
+  }
+
+  #ui input[type=range]{ width:120px; }
+  #ui label{ display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; }
+</style>
 </head>
 <body>
   <canvas id="renderCanvas"></canvas>
-  <div id="ui-panel">
-    <label>Количество комнат:</label>
-    <input type="number" id="roomsCount" value="8" min="3" max="30">
-    <label>Seed:</label>
-    <input type="text" id="seed" value="12345">
-    <button id="generateBtn">Сгенерировать заново</button>
+
+  <div id="ui">
+    <h3>Размер комнаты</h3>
+    <label>Ширина: <input type="range" id="roomWidth" min="3" max="20" value="6"><span id="roomWidthVal">6</span></label>
+    <label>Высота: <input type="range" id="roomHeight" min="3" max="20" value="6"><span id="roomHeightVal">6</span></label>
+    <button id="generateBtn">Сгенерировать комнату</button>
   </div>
 
   <script src="https://cdn.babylonjs.com/babylon.js"></script>
-<script type="module" src="src/main.js"></script>
+  <script src="https://cdn.babylonjs.com/loaders/babylon.glTF2FileLoader.js"></script>
+  <script type="module" src="src/main.js"></script>
 </body>
 </html>

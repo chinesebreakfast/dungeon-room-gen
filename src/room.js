@@ -1,17 +1,25 @@
-// src/room.js
 export class Room {
-  constructor(id, x, y, w, h, type = "normal", mobs = 0, event = null) {
-    this.id = id;
-    this.x = x;
-    this.y = y;
-    this.w = w;
-    this.h = h;
-    this.type = type;
-    this.mobs = mobs;
-    this.event = event;
+  constructor(width, height) {
+    this.width = width;
+    this.height = height;
+    this.grid = Array.from({ length: height }, () => Array(width).fill(null));
   }
 
-  get center() {
-    return { x: this.x + this.w / 2, y: this.y + this.h / 2 };
+  setTile(x, y, type) {
+    if (x < 0 || y < 0 || x >= this.width || y >= this.height) return;
+    this.grid[y][x] = type;
+  }
+
+  getTile(x, y) {
+    if (x < 0 || y < 0 || x >= this.width || y >= this.height) return null;
+    return this.grid[y][x];
+  }
+
+  fillWithFloor() {
+    for (let y = 0; y < this.height; y++) {
+      for (let x = 0; x < this.width; x++) {
+        this.setTile(x, y, "floor");
+      }
+    }
   }
 }
