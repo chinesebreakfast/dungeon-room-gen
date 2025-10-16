@@ -22,4 +22,20 @@ export class Room {
       }
     }
   }
+
+  // Получить все занятые ячейки с глобальными координатами
+  getAllFloorCells(offsetX = 0, offsetZ = 0) {
+    const cells = [];
+    for (let y = 0; y < this.height; y++) {
+      for (let x = 0; x < this.width; x++) {
+        if (this.grid[y][x] === "floor") {
+          cells.push({
+            x: x + offsetX,
+            z: y + offsetZ
+          });
+        }
+      }
+    }
+    return cells;
+  }
 }

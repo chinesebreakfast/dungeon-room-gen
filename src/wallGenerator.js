@@ -1,21 +1,51 @@
-export function generateWalls(room, renderer) {
+export function generateWalls(mergedRoom, renderer) {
   const size = renderer.tileSize;
+  const floorCells = mergedRoom.getAllFloorCells();
+  const bounds = mergedRoom.getBounds();
 
-  // Передняя и задняя стены (по оси Z) - БЕЗ поворота
-  for (let x = 0; x < room.width; x++) {
-    // Задняя стена (z = 0) - без поворота
-    renderer.setWall(x * size + size / 2, 0, 0);
-    
-    // Передняя стена (z = room.height) - без поворота
-    renderer.setWall(x * size + size / 2, room.height * size, 0);
+  // Создаем сетку для быстрой проверки
+  const floorGrid = new Set();
+  for (const cell of floorCells) {
+    floorGrid.add(`${cell.x},${cell.z}`);
   }
 
-  // Боковые стены (по оси X) - с поворотом на 90 градусов
-  for (let z = 0; z < room.height; z++) {
-    // Левая стена (x = 0) - поворот на 90°
-    renderer.setWall(0, z * size + size / 2, Math.PI / 2);
-    
-    // Правая стена (x = room.width) - поворот на 90°
-    renderer.setWall(room.width * size, z * size + size / 2, Math.PI / 2);
+  // Функция проверки - является ли ячейка полом
+  const isFloor = (x, z) => floorGrid.has(`${x},${z}`);
+
+  // Генерируем стены вокруг всех ячеек пола
+  for (const cell of floorCells) {
+    const { x, z } = cell;
+
+    // Проверяем всех соседей
+    const neighbors = [
+      { dx: 1, dz: 0 },   // справа
+      { dx: -1, dz: 0 },  // слева
+      { dx: 0, dz: 1 },   // сверху
+      { dx: 0, dz: -1 }   // снизу
+    ];
+
+    for (const { dx, dz } of neighbors) {
+      const nx = x + dx;
+      const nz = z + dz;
+
+      // Если соседняя клетка НЕ пол - ставим стену
+      if (!isFloor(nx, nz)) {
+        let wallX, wallZ, rotation;
+
+        if (dx !== 0) {
+          // Вертикальная стена (по оси X)
+          wallX = x * size + (dx > 0 ? size : 0);
+          wallZ = z * size + size / 2;
+          rotation = Math.PI / 2; // поворот на 90°
+        } else {
+          // Горизонтальная стена (по оси Z)
+          wallX = x * size + size / 2;
+          wallZ = z * size + (dz > 0 ? size : 0);
+          rotation = 0; // без поворота
+        }
+
+        renderer.setWall(wallX, wallZ, rotation);
+      }
+    }
   }
 }
