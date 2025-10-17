@@ -3,36 +3,32 @@ import { Room } from "./room.js";
 import { Level } from "./level.js";
 
 window.addEventListener("DOMContentLoaded", () => {
-  const generateBtn = document.getElementById("generateBtn");
   const renderer = new Renderer("renderCanvas");
 
-  async function generateSingleRoom() {
-    renderer.clearScene();
+  async function generateLevel() {
+    // Создаем уровень 40x40
+    const level = new Level(0, 40);
 
-    // Создаем уровень с сеткой 10x10
-    const level = new Level(0, 10);
-
-    // ОДНА комната 3x3 с дверью и туннелем
-    const room = new Room(3, 3, 3, 3, {
+    // Комната 1
+    const room1 = new Room(0, 0, 8, 6, {
       doorSide: 'east',
-      tunnelSide: 'north'
+      tunnelSide: 'south'
     });
-    
-    room.fillFloor();
-    room.generateWalls();
-    
-    level.addRoom(room);
+    room1.fillFloor();
+    room1.generateWalls();
+    level.addRoom(room1);
 
-    // Получаем данные для рендера
-    const levelData = level.mergeRooms();
-    console.log("=== ROOM DATA ===");
-    console.log("Room tiles:", levelData.tiles);
+    const room2 = new Room(20, 20, 3, 3, {
+      doorSide: 'east',
+      tunnelSide: 'south'
+    });
+    room2.fillFloor();
+    room2.generateWalls();
+    level.addRoom(room2);
 
-    // Отрисовываем - передаем ВСЕ данные тайлов включая side
-    await renderer.renderLevel(levelData);
-    renderer.updateGrid(levelData.bounds);
+    // Рендерим весь уровень
+    await renderer.renderLevel(level);
   }
 
-  generateBtn.addEventListener("click", generateSingleRoom);
-  generateSingleRoom();
+  generateLevel();
 });

@@ -1,34 +1,26 @@
 import { TILE_TYPES } from "./tile.js";
 
 export class Renderer {
-  constructor(canvasId, room = null) {
+  constructor(canvasId) {
     this.canvas = document.getElementById(canvasId);
     this.engine = new BABYLON.Engine(this.canvas, true);
     this.scene = new BABYLON.Scene(this.engine);
-    this.room = room;
     this.assetsPath = "./assets/";
     this.tileSize = 4;
     this.tileMeshes = [];
 
-    const roomWidth = room ? room.width : 10;
-    const roomHeight = room ? room.height : 10;
-
-    const camera = new BABYLON.ArcRotateCamera(
+    // Базовая камера
+    this.camera = new BABYLON.ArcRotateCamera(
       "Camera",
       -Math.PI / 2,
       Math.PI / 3,
-      60,
-      new BABYLON.Vector3(
-        (roomWidth * this.tileSize) / 2,
-        0,
-        (roomHeight * this.tileSize) / 2
-      ),
+      50,
+      new BABYLON.Vector3(0, 0, 0),
       this.scene
     );
-    camera.attachControl(this.canvas, true);
+    this.camera.attachControl(this.canvas, true);
     new BABYLON.HemisphericLight("Light", new BABYLON.Vector3(0, 1, 0), this.scene);
-
-    this.drawGrid();
+    
     this.engine.runRenderLoop(() => this.scene.render());
   }
 
@@ -39,23 +31,44 @@ export class Renderer {
     this.tileMeshes = [];
   }
 
-  async renderLevel(levelData) {
-    for (const tile of levelData.tiles) {
-      // Передаем side в setTile
-      await this.setTile(tile.x, tile.z, tile.type, tile.rotation, tile.side);
+  // Рендерим весь уровень
+  async renderLevel(level) {
+    this.clearScene();
+    
+    // Обновляем камеру под размер уровня
+    this.updateCamera(level.gridSize);
+    
+    // Рендерим все комнаты уровня
+    for (const room of level.rooms) {
+      const roomData = room.getRoomData();
+      for (const tile of roomData.tiles) {
+        await this.setTile(tile.x, tile.z, tile.type, tile.rotation, tile.side);
+      }
     }
+
+    // Рисуем сетку уровня
+    this.updateGrid(level);
   }
 
-  updateGrid(bounds) {
+    updateCamera(gridSize) {
+    const center = (gridSize * this.tileSize) / 2;
+    const cameraDistance = Math.max(gridSize * this.tileSize * 0.8, 30);
+    
+    this.camera.position = new BABYLON.Vector3(
+      center,
+      cameraDistance * 0.5,
+      -cameraDistance
+    );
+    this.camera.setTarget(new BABYLON.Vector3(center, 0, center));
+  }
+
+updateGrid(level) {
     this.scene.meshes.slice().forEach((m) => {
       if (m.name.startsWith("grid")) m.dispose();
     });
 
-    const { minX, maxX, minZ, maxZ } = bounds;
-    const width = maxX - minX + 3;
-    const height = maxZ - minZ + 3;
-    
-    this.drawGrid(width, height, minX - 1, minZ - 1);
+    // Рисуем фиксированную сетку уровня
+    this.drawGrid(level.gridSize, level.gridSize, 0, 0);
   }
 
   drawGrid(width, height, offsetX = 0, offsetZ = 0) {
