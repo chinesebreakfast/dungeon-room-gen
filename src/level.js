@@ -3,62 +3,146 @@ import { Room } from "./room.js";
 export class Level {
   constructor(levelIndex, gridSize) {
     this.levelIndex = levelIndex;
-    this.gridSize = gridSize; // Фиксированный размер сетки уровня
+    this.gridSize = gridSize;
     this.rooms = [];
-    this.grid = Array.from({ length: gridSize }, () => 
-      Array.from({ length: gridSize }, () => null)
-    );
   }
 
   addRoom(room) {
     this.rooms.push(room);
-    this.placeRoomOnGrid(room);
     return this;
   }
 
-  // Размещаем комнату на сетке уровня
-  placeRoomOnGrid(room) {
-    const { posX, posZ, width, height } = room;
-    
-    for (let z = posZ; z < posZ + height; z++) {
-      for (let x = posX; x < posX + width; x++) {
-        if (x >= 0 && x < this.gridSize && z >= 0 && z < this.gridSize) {
-          this.grid[z][x] = room; // помечаем ячейку как занятую комнатой
+  mergeRooms(...subrooms) {
+  if (subrooms.length === 0) {
+    return null;
+  }
+
+  const bounds = this.calculateMergedBounds(subrooms);
+  
+  // Создаем новую объединенную комнату
+  const mergedRoom = new Room(
+    bounds.minX, 
+    bounds.minZ, 
+    bounds.maxX - bounds.minX + 1, 
+    bounds.maxZ - bounds.minZ + 1,
+    { isMerged: true }
+  );
+
+  // Объединяем пол из всех подкомнат
+  this.mergeFloors(mergedRoom, subrooms);
+
+  // Сохраняем специальные тайлы из подкомнат
+  this.preserveSpecialTiles(mergedRoom, subrooms);
+
+  // Генерируем стены вокруг КАЖДОГО тайла пола
+  mergedRoom.generateWalls();
+
+  // ДОБАВЛЯЕМ: Добавляем недостающие стены в углах
+  this.addMissingCornerWalls(mergedRoom, subrooms);
+
+  return mergedRoom;
+}
+
+// НОВЫЙ МЕТОД: Добавляем недостающие стены в углах соединения комнат
+addMissingCornerWalls(mergedRoom, subrooms) {
+  // Собираем все позиции пола для быстрой проверки
+  const floorPositions = new Set();
+  for (const tile of mergedRoom.tiles.values()) {
+    if (tile.type === 'floor') {
+      floorPositions.add(`${tile.x},${tile.z}`);
+    }
+  }
+
+  // Находим все позиции, где могут быть углы (границы объединенной комнаты)
+  for (let x = mergedRoom.posX - 1; x <= mergedRoom.posX + mergedRoom.width; x++) {
+    for (let z = mergedRoom.posZ - 1; z <= mergedRoom.posZ + mergedRoom.height; z++) {
+      const currentKey = `${x},${z}`;
+      
+      // Пропускаем позиции с полом
+      if (floorPositions.has(currentKey)) continue;
+      
+      // Проверяем, есть ли полы по горизонтали и вертикали от этой позиции
+      const hasLeftFloor = floorPositions.has(`${x-1},${z}`);
+      const hasRightFloor = floorPositions.has(`${x+1},${z}`);
+      const hasTopFloor = floorPositions.has(`${x},${z-1}`);
+      const hasBottomFloor = floorPositions.has(`${x},${z+1}`);
+      
+      // Если есть полы и по горизонтали и по вертикали - это угловая позиция
+      const isHorizontalEdge = hasLeftFloor || hasRightFloor;
+      const isVerticalEdge = hasTopFloor || hasBottomFloor;
+      
+      if (isHorizontalEdge && isVerticalEdge) {
+        // Добавляем стены для всех направлений, где есть полы
+        if (hasLeftFloor) this.placeWallIfMissing(mergedRoom, x, z, 'east');
+        if (hasRightFloor) this.placeWallIfMissing(mergedRoom, x, z, 'west');
+        if (hasTopFloor) this.placeWallIfMissing(mergedRoom, x, z, 'south');
+        if (hasBottomFloor) this.placeWallIfMissing(mergedRoom, x, z, 'north');
+      }
+    }
+  }
+}
+
+// Вспомогательный метод: ставим стену, если ее еще нет с таким side
+placeWallIfMissing(mergedRoom, x, z, side) {
+  const key = `${x},${z}`;
+  const existingTile = mergedRoom.tiles.get(key);
+  
+  // Не перезаписываем специальные тайлы
+  if (existingTile && (existingTile.type === 'door' || existingTile.type === 'wall_to_tunnel')) {
+    return;
+  }
+  
+  // Проверяем, есть ли уже стена с таким side
+  if (existingTile && existingTile.type === 'wall' && existingTile.side === side) {
+    return; // Стена с таким side уже есть
+  }
+  
+  // Ставим новую стену
+  mergedRoom.tiles.set(key, {
+    type: 'wall',
+    x: x,
+    z: z,
+    rotation: mergedRoom.getWallRotation(side),
+    side: side
+  });
+}
+
+  mergeFloors(mergedRoom, subrooms) {
+    // Собираем все уникальные тайлы пола
+    for (const room of subrooms) {
+      const roomData = room.getRoomData();
+      for (const tile of roomData.tiles) {
+        if (tile.type === 'floor') {
+          const key = `${tile.x},${tile.z}`;
+          mergedRoom.tiles.set(key, {
+            type: 'floor',
+            x: tile.x,
+            z: tile.z,
+            rotation: 0
+          });
         }
       }
     }
   }
 
-  // Объединяет комнаты и возвращает новую комнату
-  mergeRooms(...roomsToMerge) {
-    if (roomsToMerge.length === 0) {
-      // Если комнаты не переданы, объединяем все комнаты уровня
-      roomsToMerge = this.rooms;
+  preserveSpecialTiles(mergedRoom, subrooms) {
+    // Собираем все специальные тайлы
+    for (const room of subrooms) {
+      const roomData = room.getRoomData();
+      for (const tile of roomData.tiles) {
+        if (tile.type === 'door' || tile.type === 'wall_to_tunnel') {
+          const key = `${tile.x},${tile.z}`;
+          // Сохраняем специальный тайл
+          mergedRoom.tiles.set(key, {
+            type: tile.type,
+            x: tile.x,
+            z: tile.z,
+            rotation: tile.rotation,
+            side: tile.side
+          });
+        }
+      }
     }
-
-    if (roomsToMerge.length === 0) {
-      return null; // Нет комнат для объединения
-    }
-
-    // Находим общие границы всех комнат
-    const bounds = this.calculateMergedBounds(roomsToMerge);
-    
-    // Создаем новую объединенную комнату
-    const mergedRoom = new Room(
-      bounds.minX, 
-      bounds.minZ, 
-      bounds.maxX - bounds.minX + 1, 
-      bounds.maxZ - bounds.minZ + 1,
-      { isMerged: true }
-    );
-
-    // Заполняем полом всю объединенную область
-    mergedRoom.fillFloor();
-
-    // Генерируем стены по новому периметру
-    mergedRoom.generateWalls();
-
-    return mergedRoom;
   }
 
   calculateMergedBounds(rooms) {
@@ -74,7 +158,6 @@ export class Level {
     return { minX, maxX, minZ, maxZ };
   }
 
-  // Получить данные уровня для рендеринга
   getLevelData() {
     return {
       level: this.levelIndex,

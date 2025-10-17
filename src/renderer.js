@@ -1,4 +1,5 @@
 import { TILE_TYPES } from "./tile.js";
+import { DECOR_TYPES } from "./decor.js";
 
 export class Renderer {
   constructor(canvasId) {
@@ -6,8 +7,10 @@ export class Renderer {
     this.engine = new BABYLON.Engine(this.canvas, true);
     this.scene = new BABYLON.Scene(this.engine);
     this.assetsPath = "./assets/";
+    this.propsPath = "./assets/props/";
     this.tileSize = 4;
     this.tileMeshes = [];
+    this.decorMeshes = [];
 
     // Базовая камера
     this.camera = new BABYLON.ArcRotateCamera(
@@ -29,28 +32,71 @@ export class Renderer {
       m.dispose();
     });
     this.tileMeshes = [];
+    this.decorMeshes = [];
   }
 
   // Рендерим весь уровень
   async renderLevel(level) {
     this.clearScene();
     
-    // Обновляем камеру под размер уровня
     this.updateCamera(level.gridSize);
     
     // Рендерим все комнаты уровня
     for (const room of level.rooms) {
       const roomData = room.getRoomData();
+      
+      // Рендерим тайлы (пол, стены)
       for (const tile of roomData.tiles) {
         await this.setTile(tile.x, tile.z, tile.type, tile.rotation, tile.side);
       }
+      
+      // Рендерим декоративные предметы
+      for (const decor of roomData.decor) {
+        await this.setDecor(decor.x, decor.z, decor.type, decor.rotation, decor.asset);
+      }
     }
 
-    // Рисуем сетку уровня
     this.updateGrid(level);
   }
 
-    updateCamera(gridSize) {
+  async setDecor(x, z, decorType, rotation = 0, assetFile) {
+    try {
+      const mesh = await this.loadProp(assetFile);
+      
+      // Позиционируем предмет по центру тайла
+      const posX = x * this.tileSize + this.tileSize / 2;
+      const posZ = z * this.tileSize + this.tileSize / 2;
+      
+      const container = new BABYLON.TransformNode("decorContainer", this.scene);
+      container.position = new BABYLON.Vector3(posX, 0, posZ);
+      container.rotation.y = rotation;
+      
+      mesh.parent = container;
+      mesh.position = BABYLON.Vector3.Zero();
+      
+      this.decorMeshes.push(container);
+      
+      console.log(`🎨 Rendered decor ${decorType} at (${x},${z}) with rotation ${rotation}`);
+      
+    } catch (error) {
+      console.error(`Failed to load decor ${decorType}:`, error);
+    }
+  }
+
+  async loadProp(filename) {
+    return new Promise((resolve, reject) => {
+      BABYLON.SceneLoader.ImportMesh("", this.propsPath, filename, this.scene, (meshes) => {
+        if (meshes.length > 0) {
+          // Масштабируем предметы чтобы они помещались в тайл
+          meshes[0].scaling = new BABYLON.Vector3(1.5, 1.5, 1.5);
+          resolve(meshes[0]);
+        }
+        else reject("Не удалось загрузить декоративный предмет: " + filename);
+      });
+    });
+  }
+
+  updateCamera(gridSize) {
     const center = (gridSize * this.tileSize) / 2;
     const cameraDistance = Math.max(gridSize * this.tileSize * 0.8, 30);
     
@@ -62,7 +108,7 @@ export class Renderer {
     this.camera.setTarget(new BABYLON.Vector3(center, 0, center));
   }
 
-updateGrid(level) {
+  updateGrid(level) {
     this.scene.meshes.slice().forEach((m) => {
       if (m.name.startsWith("grid")) m.dispose();
     });
@@ -98,9 +144,9 @@ updateGrid(level) {
       let posX = x * this.tileSize + this.tileSize / 2;
       let posZ = z * this.tileSize + this.tileSize / 2;
 
-      // ВАРИАНТ 3 - СМЕЩЕНИЕ СТЕН В НАПРАВЛЕНИИ К КОМНАТЕ
+      // СМЕЩЕНИЕ СТЕН В НАПРАВЛЕНИИ К КОМНАТЕ
       if ((type === 'wall' || type === 'door') && side) {
-        const edgeOffset = this.tileSize*0.05; // Начни с 0.1, потом подбери
+        const edgeOffset = this.tileSize * 0.05;
         
         switch (side) {
           case 'north':
@@ -121,18 +167,19 @@ updateGrid(level) {
             break;
         }
       }
+
       // ДОПОЛНИТЕЛЬНЫЙ ПОВОРОТ ДЛЯ WALL_TO_TUNNEL
-    let finalRotation = rotation;
-    if (type === 'wall_to_tunnel' && side) {
-      switch (side) {
-        case 'south':
-        case 'east':
-          // Поворачиваем на 180 градусов для южной и восточной сторон
-          finalRotation = rotation + Math.PI;
-          break;
-        // north и west остаются с обычным rotation
+      let finalRotation = rotation;
+      if (type === 'wall_to_tunnel' && side) {
+        switch (side) {
+          case 'south':
+          case 'east':
+            // Поворачиваем на 180 градусов для южной и восточной сторон
+            finalRotation = rotation + Math.PI;
+            break;
+          // north и west остаются с обычным rotation
+        }
       }
-    }
 
       const container = new BABYLON.TransformNode("tileContainer", this.scene);
       container.position = new BABYLON.Vector3(posX, 0, posZ);

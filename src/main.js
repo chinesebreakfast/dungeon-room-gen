@@ -1,33 +1,37 @@
 import { Renderer } from "./renderer.js";
 import { Room } from "./room.js";
 import { Level } from "./level.js";
+import { DebugMode } from "./debug.js"; // ← ДОБАВЛЯЕМ
 
 window.addEventListener("DOMContentLoaded", () => {
   const renderer = new Renderer("renderCanvas");
+  let debugMode = null;
 
   async function generateLevel() {
-    // Создаем уровень 40x40
-    const level = new Level(0, 40);
+    const level = new Level(0, 20);
 
-    // Комната 1
-    const room1 = new Room(0, 0, 8, 6, {
-      doorSide: 'east',
-      tunnelSide: 'south'
+    // Первая комната
+    const room1 = new Room(2, 2, 5, 5, {
+      doorSide: 'south',
+      tunnelSide: 'west'
     });
     room1.fillFloor();
     room1.generateWalls();
+    room1.generateDecor();
     level.addRoom(room1);
 
-    const room2 = new Room(20, 20, 3, 3, {
-      doorSide: 'east',
-      tunnelSide: 'south'
+    // Для сокровищницы:
+    const treasureRoom = new Room(15, 15, 4, 4, {
+      doorSide: 'north',
+      isTreasureRoom: true // ← Помечаем как сокровищницу
     });
-    room2.fillFloor();
-    room2.generateWalls();
-    level.addRoom(room2);
+    treasureRoom.fillFloor();
+    treasureRoom.generateWalls();
+    treasureRoom.generateDecor();
+    level.addRoom(treasureRoom);
 
-    // Рендерим весь уровень
     await renderer.renderLevel(level);
+    debugMode = new DebugMode(renderer, level);
   }
 
   generateLevel();
