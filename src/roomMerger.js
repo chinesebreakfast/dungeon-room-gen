@@ -6,17 +6,14 @@ export class RoomMerger {
     this.mergedFloorCells = new Set();
   }
 
-  // Добавить комнату с позицией
   addRoom(room, offsetX = 0, offsetZ = 0) {
     this.rooms.push({ room, offsetX, offsetZ });
     return this;
   }
 
-  // Объединить все комнаты
   mergeRooms() {
     this.mergedFloorCells.clear();
     
-    // Собираем все ячейки пола из всех комнат с их смещениями
     for (const { room, offsetX, offsetZ } of this.rooms) {
       const floorCells = room.getAllFloorCells(offsetX, offsetZ);
       for (const cell of floorCells) {
@@ -31,7 +28,8 @@ export class RoomMerger {
         return { x, z };
       }),
       isFloor: (x, z) => this.mergedFloorCells.has(`${x},${z}`),
-      getBounds: () => this.calculateBounds()
+      getBounds: () => this.calculateBounds(),
+      getRooms: () => this.rooms // ← ДОБАВЛЯЕМ ЭТОТ МЕТОД
     };
   }
 

@@ -10,7 +10,6 @@ export class Renderer {
     this.tileSize = 4;
     this.tileMeshes = [];
 
-    // Если комната не передана, используем значения по умолчанию для камеры
     const roomWidth = room ? room.width : 10;
     const roomHeight = room ? room.height : 10;
 
@@ -29,78 +28,114 @@ export class Renderer {
     camera.attachControl(this.canvas, true);
     new BABYLON.HemisphericLight("Light", new BABYLON.Vector3(0, 1, 0), this.scene);
 
-    // Рисуем сетку только если есть комната
-    if (room) {
-      this.drawGrid();
-    }
-    
+    this.drawGrid();
     this.engine.runRenderLoop(() => this.scene.render());
   }
 
   clearScene() {
     this.scene.meshes.slice().forEach((m) => {
-      if (!m.name.startsWith("grid")) m.dispose();
+      m.dispose();
     });
+    this.tileMeshes = [];
   }
 
-  drawGrid() {
-    if (!this.room) return;
+  async renderLevel(levelData) {
+    for (const tile of levelData.tiles) {
+      // Передаем side в setTile
+      await this.setTile(tile.x, tile.z, tile.type, tile.rotation, tile.side);
+    }
+  }
+
+  updateGrid(bounds) {
+    this.scene.meshes.slice().forEach((m) => {
+      if (m.name.startsWith("grid")) m.dispose();
+    });
+
+    const { minX, maxX, minZ, maxZ } = bounds;
+    const width = maxX - minX + 3;
+    const height = maxZ - minZ + 3;
     
+    this.drawGrid(width, height, minX - 1, minZ - 1);
+  }
+
+  drawGrid(width, height, offsetX = 0, offsetZ = 0) {
     const color = new BABYLON.Color3(0.4, 0.4, 0.4);
     const size = this.tileSize;
 
-    for (let x = 0; x <= this.room.width; x++) {
-      const p1 = new BABYLON.Vector3(x * size, 0, 0);
-      const p2 = new BABYLON.Vector3(x * size, 0, this.room.height * size);
+    for (let x = 0; x <= width; x++) {
+      const p1 = new BABYLON.Vector3((offsetX + x) * size, 0, offsetZ * size);
+      const p2 = new BABYLON.Vector3((offsetX + x) * size, 0, (offsetZ + height) * size);
       BABYLON.MeshBuilder.CreateLines("gridV" + x, { points: [p1, p2], color }, this.scene);
     }
 
-    for (let y = 0; y <= this.room.height; y++) {
-      const p1 = new BABYLON.Vector3(0, 0, y * size);
-      const p2 = new BABYLON.Vector3(this.room.width * size, 0, y * size);
-      BABYLON.MeshBuilder.CreateLines("gridH" + y, { points: [p1, p2], color }, this.scene);
+    for (let z = 0; z <= height; z++) {
+      const p1 = new BABYLON.Vector3(offsetX * size, 0, (offsetZ + z) * size);
+      const p2 = new BABYLON.Vector3((offsetX + width) * size, 0, (offsetZ + z) * size);
+      BABYLON.MeshBuilder.CreateLines("gridH" + z, { points: [p1, p2], color }, this.scene);
     }
   }
 
-  async fillRoom() {
-    if (!this.room) return;
-    
-    for (let y = 0; y < this.room.height; y++) {
-      for (let x = 0; x < this.room.width; x++) {
-        await this.setTile(x, y, "floor");
-      }
-    }
-  }
-
-  async setTile(x, y, type) {
+  async setTile(x, z, type, rotation = 0, side = null) {
     const tileDef = TILE_TYPES[type];
     if (!tileDef) return;
 
-    const mesh = await this.loadTile(tileDef.file);
-    mesh.position = new BABYLON.Vector3(
-      x * this.tileSize + this.tileSize / 2,
-      0,
-      y * this.tileSize + this.tileSize / 2
-    );
-    this.tileMeshes.push(mesh);
-  }
+    try {
+      const mesh = await this.loadTile(tileDef.file);
+      
+      let posX = x * this.tileSize + this.tileSize / 2;
+      let posZ = z * this.tileSize + this.tileSize / 2;
 
-  async setWall(wx, wz, rotationY) {
-    const tileDef = TILE_TYPES["wall"];
-    if (!tileDef) return;
+      // ВАРИАНТ 3 - СМЕЩЕНИЕ СТЕН В НАПРАВЛЕНИИ К КОМНАТЕ
+      if ((type === 'wall' || type === 'door') && side) {
+        const edgeOffset = this.tileSize*0.05; // Начни с 0.1, потом подбери
+        
+        switch (side) {
+          case 'north':
+            // Северная стена - смещаем ВВЕРХ (к комнате снизу)
+            posZ = z * this.tileSize + this.tileSize - edgeOffset;
+            break;
+          case 'south':
+            // Южная стена - смещаем ВНИЗ (к комнате сверху)
+            posZ = z * this.tileSize + edgeOffset;
+            break;
+          case 'west':
+            // Западная стена - смещаем ВПРАВО (к комнате слева)
+            posX = x * this.tileSize + this.tileSize - edgeOffset;
+            break;
+          case 'east':
+            // Восточная стена - смещаем ВЛЕВО (к комнате справа)
+            posX = x * this.tileSize + edgeOffset;
+            break;
+        }
+      }
+      // ДОПОЛНИТЕЛЬНЫЙ ПОВОРОТ ДЛЯ WALL_TO_TUNNEL
+    let finalRotation = rotation;
+    if (type === 'wall_to_tunnel' && side) {
+      switch (side) {
+        case 'south':
+        case 'east':
+          // Поворачиваем на 180 градусов для южной и восточной сторон
+          finalRotation = rotation + Math.PI;
+          break;
+        // north и west остаются с обычным rotation
+      }
+    }
 
-    const mesh = await this.loadTile(tileDef.file);
-    
-    // Создаем родительский контейнер
-    const container = new BABYLON.TransformNode("wallContainer", this.scene);
-    container.position = new BABYLON.Vector3(wx, 0, wz);
-    container.rotation.y = rotationY;
-    
-    // Присоединяем mesh к контейнеру
-    mesh.parent = container;
-    mesh.position = BABYLON.Vector3.Zero();
-    
-    this.tileMeshes.push(container);
+      const container = new BABYLON.TransformNode("tileContainer", this.scene);
+      container.position = new BABYLON.Vector3(posX, 0, posZ);
+      container.rotation.y = finalRotation;
+      
+      mesh.parent = container;
+      mesh.position = BABYLON.Vector3.Zero();
+      
+      this.tileMeshes.push(container);
+      
+    } catch (error) {
+      console.error(`Failed to load ${type}:`, error);
+      if (type === 'wall_to_tunnel') {
+        await this.setTile(x, z, 'door', rotation, side);
+      }
+    }
   }
 
   async loadTile(filename) {

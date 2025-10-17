@@ -1,38 +1,38 @@
 import { Renderer } from "./renderer.js";
 import { Room } from "./room.js";
-import { RoomMerger } from "./roomMerger.js";
-import { generateWalls } from "./wallGenerator.js";
+import { Level } from "./level.js";
 
 window.addEventListener("DOMContentLoaded", () => {
   const generateBtn = document.getElementById("generateBtn");
-  const renderer = new Renderer("renderCanvas"); // без комнаты
+  const renderer = new Renderer("renderCanvas");
 
-  async function generateLRoom() {
+  async function generateSingleRoom() {
     renderer.clearScene();
 
-    const roomMerger = new RoomMerger();
-    
-    // Создаем L-образную комнату
-    const room1 = new Room(3, 4); // 3x4
-    room1.fillWithFloor();
-    roomMerger.addRoom(room1, 0, 0);
-    
-    const room2 = new Room(5, 3); // 5x3  
-    room2.fillWithFloor();
-    roomMerger.addRoom(room2, 2, 1); // пересекается с первой
-    
-    const mergedRoom = roomMerger.mergeRooms();
+    // Создаем уровень с сеткой 10x10
+    const level = new Level(0, 10);
 
-    // Отрисовываем пол
-    const floorCells = mergedRoom.getAllFloorCells();
-    for (const cell of floorCells) {
-      await renderer.setTile(cell.x, cell.z, "floor");
-    }
+    // ОДНА комната 3x3 с дверью и туннелем
+    const room = new Room(3, 3, 3, 3, {
+      doorSide: 'east',
+      tunnelSide: 'north'
+    });
+    
+    room.fillFloor();
+    room.generateWalls();
+    
+    level.addRoom(room);
 
-    // Генерируем стены
-    generateWalls(mergedRoom, renderer);
+    // Получаем данные для рендера
+    const levelData = level.mergeRooms();
+    console.log("=== ROOM DATA ===");
+    console.log("Room tiles:", levelData.tiles);
+
+    // Отрисовываем - передаем ВСЕ данные тайлов включая side
+    await renderer.renderLevel(levelData);
+    renderer.updateGrid(levelData.bounds);
   }
 
-  generateBtn.addEventListener("click", generateLRoom);
-  generateLRoom();
+  generateBtn.addEventListener("click", generateSingleRoom);
+  generateSingleRoom();
 });
