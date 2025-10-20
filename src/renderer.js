@@ -76,7 +76,7 @@ export class Renderer {
       
       this.decorMeshes.push(container);
       
-      console.log(`🎨 Rendered decor ${decorType} at (${x},${z}) with rotation ${rotation}`);
+      //console.log(`🎨 Rendered decor ${decorType} at (${x},${z}) with rotation ${rotation}`);
       
     } catch (error) {
       console.error(`Failed to load decor ${decorType}:`, error);
