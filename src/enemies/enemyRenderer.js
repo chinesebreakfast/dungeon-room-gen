@@ -8,7 +8,6 @@ export class EnemyRenderer {
 
   // Рендеринг всех врагов
   async renderEnemies(enemiesData, enemyManager) {
-    console.log(`🎨 Rendering ${enemiesData.length} enemies...`);
     
     for (const enemyData of enemiesData) {
       await this.renderEnemy(enemyData, enemyManager);
@@ -21,8 +20,6 @@ export class EnemyRenderer {
   async renderEnemy(enemyData, enemyManager) {
     try {
       const { id, type, x, z, config } = enemyData;
-      
-      console.log(`🔄 Rendering ${type} at (${x}, ${z})`);
       
       const result = await this.loadEnemyModel(config.file, id);
       if (!result) {
@@ -52,8 +49,6 @@ export class EnemyRenderer {
       if (enemy) {
         enemy.setAnimationGroups(animationGroups);
       }
-      
-      console.log(`✅ Rendered ${type} at (${x}, ${z})`);
       
     } catch (error) {
       console.error(`❌ Error rendering enemy:`, error);

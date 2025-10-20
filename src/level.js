@@ -1,10 +1,37 @@
 import { Room } from "./room.js";
+import { BSPGenerator } from "./BSPGenerator.js";
 
 export class Level {
   constructor(levelIndex, gridSize) {
     this.levelIndex = levelIndex;
     this.gridSize = gridSize;
     this.rooms = [];
+  }
+
+  generateRooms() {
+    console.log(`🏗️ Generating rooms for level ${this.levelIndex}...`);
+    
+    const generator = new BSPGenerator(this.levelIndex, this.gridSize);
+    const generatedRooms = generator.generate();
+    
+    // Добавляем сгенерированные комнаты
+    generatedRooms.forEach(room => {
+      this.addRoom(room);
+    });
+    
+    // Заполняем комнаты полом, стенами и декором
+    this.generateRoomContents();
+    
+    console.log(`✅ Level generation complete: ${this.rooms.length} rooms`);
+  }
+
+  // Генерация содержимого комнат
+  generateRoomContents() {
+    this.rooms.forEach(room => {
+      room.fillFloor();
+      room.generateWalls();
+      room.generateDecor();
+    });
   }
 
   addRoom(room) {

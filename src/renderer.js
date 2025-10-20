@@ -1,3 +1,4 @@
+// renderer.js
 import { TILE_TYPES } from "./tile.js";
 import { DECOR_TYPES } from "./decor.js";
 
@@ -12,6 +13,16 @@ export class Renderer {
     this.tileMeshes = [];
     this.decorMeshes = [];
 
+    // 🔥 ОПТИМИЗАЦИИ BABYLON
+    this.scene.autoClear = false;
+    this.scene.autoClearDepthAndStencil = false;
+    this.engine.setHardwareScalingLevel(0.8);
+    
+    // 🔥 КЭШ МОДЕЛЕЙ
+    this.tileCache = new Map();
+    this.propCache = new Map();
+    this.pendingLoads = new Map();
+
     // Базовая камера
     this.camera = new BABYLON.ArcRotateCamera(
       "Camera",
@@ -22,78 +33,274 @@ export class Renderer {
       this.scene
     );
     this.camera.attachControl(this.canvas, true);
-    new BABYLON.HemisphericLight("Light", new BABYLON.Vector3(0, 1, 0), this.scene);
+    
+    const light = new BABYLON.HemisphericLight("Light", new BABYLON.Vector3(0, 1, 0), this.scene);
+    light.intensity = 0.7;
     
     this.engine.runRenderLoop(() => this.scene.render());
   }
 
   clearScene() {
-    this.scene.meshes.slice().forEach((m) => {
-      m.dispose();
+    this.scene.meshes.forEach((m) => {
+      if (!m.name.startsWith("grid")) {
+        m.dispose();
+      }
     });
     this.tileMeshes = [];
     this.decorMeshes = [];
   }
 
-  // Рендерим весь уровень
   async renderLevel(level) {
-    this.clearScene();
+    console.log("⚡ FAST RENDERING level...");
+    const startTime = performance.now();
     
+    this.clearScene();
     this.updateCamera(level.gridSize);
     
-    // Рендерим все комнаты уровня
-    for (const room of level.rooms) {
-      const roomData = room.getRoomData();
-      
-      // Рендерим тайлы (пол, стены)
-      for (const tile of roomData.tiles) {
-        await this.setTile(tile.x, tile.z, tile.type, tile.rotation, tile.side);
-      }
-      
-      // Рендерим декоративные предметы
-      for (const decor of roomData.decor) {
-        await this.setDecor(decor.x, decor.z, decor.type, decor.rotation, decor.asset);
-      }
-    }
+    await this.preloadAllModels(level);
+    
+    const roomPromises = level.rooms.map(room => this.renderRoomBatch(room));
+    await Promise.all(roomPromises);
 
     this.updateGrid(level);
+    
+    const endTime = performance.now();
+    console.log(`✅ FAST RENDERING completed in ${(endTime - startTime).toFixed(2)}ms`);
   }
 
-  async setDecor(x, z, decorType, rotation = 0, assetFile) {
+  async preloadAllModels(level) {
+    const loadPromises = [];
+    
+    Object.values(TILE_TYPES).forEach(tileDef => {
+      if (!this.tileCache.has(tileDef.file)) {
+        loadPromises.push(this.cacheTileModel(tileDef.file));
+      }
+    });
+    
+    const decorTypes = new Set();
+    level.rooms.forEach(room => {
+      room.getRoomData().decor.forEach(decor => {
+        decorTypes.add(decor.asset);
+      });
+    });
+    
+    decorTypes.forEach(assetFile => {
+      if (!this.propCache.has(assetFile)) {
+        loadPromises.push(this.cachePropModel(assetFile));
+      }
+    });
+    
+    await Promise.all(loadPromises);
+  }
+
+  async cacheTileModel(filename) {
+    if (this.tileCache.has(filename)) return this.tileCache.get(filename);
+    
+    if (this.pendingLoads.has(filename)) {
+      return this.pendingLoads.get(filename);
+    }
+    
+    const loadPromise = new Promise((resolve, reject) => {
+      BABYLON.SceneLoader.ImportMesh("", this.assetsPath, filename, this.scene, (meshes) => {
+        if (meshes.length > 0) {
+          const mesh = meshes[0];
+          mesh.setEnabled(false);
+          
+          // 🔥 СОЗДАЕМ TRANSFORM NODE ДЛЯ ПРАВИЛЬНЫХ ПОВОРОТОВ
+          const container = new BABYLON.TransformNode(`cache_${filename}`, this.scene);
+          mesh.parent = container;
+          mesh.position = BABYLON.Vector3.Zero();
+          mesh.rotation = BABYLON.Vector3.Zero();
+          
+          this.tileCache.set(filename, { mesh, container });
+          this.pendingLoads.delete(filename);
+          resolve({ mesh, container });
+        } else {
+          reject("Не удалось загрузить " + filename);
+        }
+      });
+    });
+    
+    this.pendingLoads.set(filename, loadPromise);
+    return loadPromise;
+  }
+
+  async cachePropModel(filename) {
+    if (this.propCache.has(filename)) return this.propCache.get(filename);
+    
+    if (this.pendingLoads.has(filename)) {
+      return this.pendingLoads.get(filename);
+    }
+    
+    const loadPromise = new Promise((resolve, reject) => {
+      BABYLON.SceneLoader.ImportMesh("", this.propsPath, filename, this.scene, (meshes) => {
+        if (meshes.length > 0) {
+          const mesh = meshes[0];
+          mesh.setEnabled(false);
+          mesh.scaling = new BABYLON.Vector3(1.5, 1.5, 1.5);
+          
+          const container = new BABYLON.TransformNode(`cache_prop_${filename}`, this.scene);
+          mesh.parent = container;
+          mesh.position = BABYLON.Vector3.Zero();
+          mesh.rotation = BABYLON.Vector3.Zero();
+          
+          this.propCache.set(filename, { mesh, container });
+          this.pendingLoads.delete(filename);
+          resolve({ mesh, container });
+        } else {
+          reject("Не удалось загрузить декоративный предмет: " + filename);
+        }
+      });
+    });
+    
+    this.pendingLoads.set(filename, loadPromise);
+    return loadPromise;
+  }
+
+  async renderRoomBatch(room) {
+    const roomData = room.getRoomData();
+    const tilePromises = [];
+    const decorPromises = [];
+    
+    roomData.tiles.forEach(tile => {
+      tilePromises.push(this.setTileFast(tile.x, tile.z, tile.type, tile.rotation, tile.side));
+    });
+    
+    roomData.decor.forEach(decor => {
+      decorPromises.push(this.setDecorFast(decor.x, decor.z, decor.type, decor.rotation, decor.asset));
+    });
+    
+    await Promise.all([...tilePromises, ...decorPromises]);
+  }
+
+  // 🔥 ИСПРАВЛЕННЫЙ ПОВОРОТ ДЕКОРА
+  async setDecorFast(x, z, decorType, rotation = 0, assetFile) {
     try {
-      const mesh = await this.loadProp(assetFile);
+      const cached = this.propCache.get(assetFile);
+      if (!cached) {
+        await this.cachePropModel(assetFile);
+        return this.setDecorFast(x, z, decorType, rotation, assetFile);
+      }
       
-      // Позиционируем предмет по центру тайла
+      const { mesh: originalMesh, container: originalContainer } = cached;
+      
+      // 🔥 КЛОНИРУЕМ КОНТЕЙНЕР ВМЕСТО МЕША
+      const newContainer = originalContainer.clone(`decor_container_${x}_${z}`, null);
+      if (!newContainer) return;
+      
+      // 🔥 КЛОНИРУЕМ МЕШ И ДОБАВЛЯЕМ В НОВЫЙ КОНТЕЙНЕР
+      const mesh = originalMesh.clone(`decor_${x}_${z}`, newContainer);
+      if (!mesh) return;
+      
+      newContainer.setEnabled(true);
+      mesh.setEnabled(true);
+      
       const posX = x * this.tileSize + this.tileSize / 2;
       const posZ = z * this.tileSize + this.tileSize / 2;
       
-      const container = new BABYLON.TransformNode("decorContainer", this.scene);
-      container.position = new BABYLON.Vector3(posX, 0, posZ);
-      container.rotation.y = rotation;
+      // 🔥 ПОВОРАЧИВАЕМ КОНТЕЙНЕР, А НЕ МЕШ
+      newContainer.position = new BABYLON.Vector3(posX, 0, posZ);
+      newContainer.rotation.y = rotation;
       
-      mesh.parent = container;
+      // Меш остается с нулевым поворотом внутри контейнера
       mesh.position = BABYLON.Vector3.Zero();
+      mesh.rotation = BABYLON.Vector3.Zero();
       
-      this.decorMeshes.push(container);
-      
-      //console.log(`🎨 Rendered decor ${decorType} at (${x},${z}) with rotation ${rotation}`);
+      this.decorMeshes.push(newContainer);
       
     } catch (error) {
       console.error(`Failed to load decor ${decorType}:`, error);
     }
   }
 
-  async loadProp(filename) {
-    return new Promise((resolve, reject) => {
-      BABYLON.SceneLoader.ImportMesh("", this.propsPath, filename, this.scene, (meshes) => {
-        if (meshes.length > 0) {
-          // Масштабируем предметы чтобы они помещались в тайл
-          meshes[0].scaling = new BABYLON.Vector3(1.5, 1.5, 1.5);
-          resolve(meshes[0]);
+  // 🔥 ИСПРАВЛЕННЫЙ ПОВОРОТ ТАЙЛОВ
+  async setTileFast(x, z, type, rotation = 0, side = null) {
+    const tileDef = TILE_TYPES[type];
+    if (!tileDef) return;
+
+    try {
+      const cached = this.tileCache.get(tileDef.file);
+      if (!cached) {
+        await this.cacheTileModel(tileDef.file);
+        return this.setTileFast(x, z, type, rotation, side);
+      }
+      
+      const { mesh: originalMesh, container: originalContainer } = cached;
+      
+      // 🔥 КЛОНИРУЕМ КОНТЕЙНЕР
+      const newContainer = originalContainer.clone(`tile_container_${x}_${z}`, null);
+      if (!newContainer) return;
+      
+      // 🔥 КЛОНИРУЕМ МЕШ В КОНТЕЙНЕР
+      const mesh = originalMesh.clone(`tile_${x}_${z}`, newContainer);
+      if (!mesh) return;
+      
+      newContainer.setEnabled(true);
+      mesh.setEnabled(true);
+      
+      let posX = x * this.tileSize + this.tileSize / 2;
+      let posZ = z * this.tileSize + this.tileSize / 2;
+
+      // СМЕЩЕНИЕ СТЕН
+      if ((type === 'wall' || type === 'door') && side) {
+        const edgeOffset = this.tileSize * 0.05;
+        
+        switch (side) {
+          case 'north': posZ = z * this.tileSize + this.tileSize - edgeOffset; break;
+          case 'south': posZ = z * this.tileSize + edgeOffset; break;
+          case 'west': posX = x * this.tileSize + this.tileSize - edgeOffset; break;
+          case 'east': posX = x * this.tileSize + edgeOffset; break;
         }
-        else reject("Не удалось загрузить декоративный предмет: " + filename);
-      });
-    });
+      }
+
+      // 🔥 ВЫЧИСЛЯЕМ ФИНАЛЬНЫЙ ПОВОРОТ
+      let finalRotation = rotation;
+      if (type === 'wall_to_tunnel' && side) {
+        if (side === 'south' || side === 'east') {
+          finalRotation = rotation + Math.PI;
+        }
+      }
+
+      // 🔥 ПРИМЕНЯЕМ ПОВОРОТ К КОНТЕЙНЕРУ
+      newContainer.position = new BABYLON.Vector3(posX, 0, posZ);
+      newContainer.rotation.y = finalRotation;
+      
+      // Меш остается с нулевым поворотом
+      mesh.position = BABYLON.Vector3.Zero();
+      mesh.rotation = BABYLON.Vector3.Zero();
+      
+      this.tileMeshes.push(newContainer);
+      
+      // 🔥 ДЕБАГ ПОВОРОТОВ
+      if (type === 'wall' && (rotation === Math.PI/2 || rotation === 0)) {
+        console.log(`🧱 Wall at (${x},${z}) side:${side} rotation:${finalRotation.toFixed(2)}rad (${(finalRotation * 180/Math.PI).toFixed(0)}°)`);
+      }
+      
+    } catch (error) {
+      console.error(`Failed to load ${type}:`, error);
+      if (type === 'wall_to_tunnel') {
+        await this.setTileFast(x, z, 'door', rotation, side);
+      }
+    }
+  }
+
+  // Старые методы для совместимости
+  async setDecor(x, z, decorType, rotation = 0, assetFile) {
+    return this.setDecorFast(x, z, decorType, rotation, assetFile);
+  }
+
+  async setTile(x, z, type, rotation = 0, side = null) {
+    return this.setTileFast(x, z, type, rotation, side);
+  }
+
+  async loadProp(filename) {
+    const cached = await this.cachePropModel(filename);
+    return cached.mesh;
+  }
+
+  async loadTile(filename) {
+    const cached = await this.cacheTileModel(filename);
+    return cached.mesh;
   }
 
   updateCamera(gridSize) {
@@ -109,11 +316,10 @@ export class Renderer {
   }
 
   updateGrid(level) {
-    this.scene.meshes.slice().forEach((m) => {
+    this.scene.meshes.forEach((m) => {
       if (m.name.startsWith("grid")) m.dispose();
     });
 
-    // Рисуем фиксированную сетку уровня
     this.drawGrid(level.gridSize, level.gridSize, 0, 0);
   }
 
@@ -121,89 +327,16 @@ export class Renderer {
     const color = new BABYLON.Color3(0.4, 0.4, 0.4);
     const size = this.tileSize;
 
-    for (let x = 0; x <= width; x++) {
+    for (let x = 0; x <= width; x += 2) {
       const p1 = new BABYLON.Vector3((offsetX + x) * size, 0, offsetZ * size);
       const p2 = new BABYLON.Vector3((offsetX + x) * size, 0, (offsetZ + height) * size);
       BABYLON.MeshBuilder.CreateLines("gridV" + x, { points: [p1, p2], color }, this.scene);
     }
 
-    for (let z = 0; z <= height; z++) {
+    for (let z = 0; z <= height; z += 2) {
       const p1 = new BABYLON.Vector3(offsetX * size, 0, (offsetZ + z) * size);
       const p2 = new BABYLON.Vector3((offsetX + width) * size, 0, (offsetZ + z) * size);
       BABYLON.MeshBuilder.CreateLines("gridH" + z, { points: [p1, p2], color }, this.scene);
     }
-  }
-
-  async setTile(x, z, type, rotation = 0, side = null) {
-    const tileDef = TILE_TYPES[type];
-    if (!tileDef) return;
-
-    try {
-      const mesh = await this.loadTile(tileDef.file);
-      
-      let posX = x * this.tileSize + this.tileSize / 2;
-      let posZ = z * this.tileSize + this.tileSize / 2;
-
-      // СМЕЩЕНИЕ СТЕН В НАПРАВЛЕНИИ К КОМНАТЕ
-      if ((type === 'wall' || type === 'door') && side) {
-        const edgeOffset = this.tileSize * 0.05;
-        
-        switch (side) {
-          case 'north':
-            // Северная стена - смещаем ВВЕРХ (к комнате снизу)
-            posZ = z * this.tileSize + this.tileSize - edgeOffset;
-            break;
-          case 'south':
-            // Южная стена - смещаем ВНИЗ (к комнате сверху)
-            posZ = z * this.tileSize + edgeOffset;
-            break;
-          case 'west':
-            // Западная стена - смещаем ВПРАВО (к комнате слева)
-            posX = x * this.tileSize + this.tileSize - edgeOffset;
-            break;
-          case 'east':
-            // Восточная стена - смещаем ВЛЕВО (к комнате справа)
-            posX = x * this.tileSize + edgeOffset;
-            break;
-        }
-      }
-
-      // ДОПОЛНИТЕЛЬНЫЙ ПОВОРОТ ДЛЯ WALL_TO_TUNNEL
-      let finalRotation = rotation;
-      if (type === 'wall_to_tunnel' && side) {
-        switch (side) {
-          case 'south':
-          case 'east':
-            // Поворачиваем на 180 градусов для южной и восточной сторон
-            finalRotation = rotation + Math.PI;
-            break;
-          // north и west остаются с обычным rotation
-        }
-      }
-
-      const container = new BABYLON.TransformNode("tileContainer", this.scene);
-      container.position = new BABYLON.Vector3(posX, 0, posZ);
-      container.rotation.y = finalRotation;
-      
-      mesh.parent = container;
-      mesh.position = BABYLON.Vector3.Zero();
-      
-      this.tileMeshes.push(container);
-      
-    } catch (error) {
-      console.error(`Failed to load ${type}:`, error);
-      if (type === 'wall_to_tunnel') {
-        await this.setTile(x, z, 'door', rotation, side);
-      }
-    }
-  }
-
-  async loadTile(filename) {
-    return new Promise((resolve, reject) => {
-      BABYLON.SceneLoader.ImportMesh("", this.assetsPath, filename, this.scene, (meshes) => {
-        if (meshes.length > 0) resolve(meshes[0]);
-        else reject("Не удалось загрузить " + filename);
-      });
-    });
   }
 }

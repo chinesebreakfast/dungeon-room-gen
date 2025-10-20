@@ -11,7 +11,6 @@ export class EnemyManager {
   // Генерация врагов для комнаты
   spawnEnemiesInRoom(room) {
     const roomId = `${room.posX},${room.posZ}`;
-    console.log(`🧟 Spawning enemies in room ${roomId}`);
     
     const availableTiles = this.getAvailableSpawnTiles(room);
     console.log(`   Found ${availableTiles.length} available tiles`);
@@ -25,7 +24,6 @@ export class EnemyManager {
         this.enemies.set(enemy.id, enemy);
         spawnedCount++;
         
-        console.log(`   🎯 Spawned ${enemyType} at (${tile.x}, ${tile.z})`);
       }
     }
     

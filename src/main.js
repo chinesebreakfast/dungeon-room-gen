@@ -13,31 +13,12 @@ window.addEventListener("DOMContentLoaded", () => {
   let enemyRenderer = null;
 
   async function generateLevel() {
-    const level = new Level(0, 20);
+    const level = new Level(0, 30);
+    level.generateRooms();
 
     enemyManager = new EnemyManager(level);
     enemyRenderer = new EnemyRenderer(renderer.scene, "./assets/enemy/");
 
-    // Первая комната
-    const room1 = new Room(2, 2, 5, 5, {
-      doorSide: 'south',
-      tunnelSide: 'west'
-    });
-    room1.fillFloor();
-    room1.generateWalls();
-    room1.generateDecor();
-    level.addRoom(room1);
-
-    // Для сокровищницы:
-    const treasureRoom = new Room(15, 15, 4, 4, {
-      doorSide: 'north',
-      isTreasureRoom: true // ← Помечаем как сокровищницу
-    });
-    treasureRoom.fillFloor();
-    treasureRoom.generateWalls();
-    treasureRoom.generateDecor();
-    level.addRoom(treasureRoom);
-    
     // Спавн врагов в комнатах
     level.rooms.forEach(room => {
       enemyManager.spawnEnemiesInRoom(room);
@@ -51,8 +32,16 @@ window.addEventListener("DOMContentLoaded", () => {
     await enemyRenderer.renderEnemies(enemiesData, enemyManager);
 
     startEnemyUpdateLoop();
-    enemiesData.forEach(enemy => {
-      console.log(`- ${enemy.type} at (${enemy.x}, ${enemy.z})`);
+    // Отладочная информация
+    console.log('=== DUNGEON GENERATION SUMMARY ===');
+    console.log(`Level: ${level.levelIndex}`);
+    console.log(`Grid size: ${level.gridSize}`);
+    console.log(`Rooms: ${level.rooms.length}`);
+    console.log(`Enemies: ${enemyManager.getEnemyCount()}`);
+    
+    // Показываем позиции комнат
+    level.rooms.forEach((room, index) => {
+      console.log(`Room ${index}: (${room.posX},${room.posZ}) ${room.width}x${room.height}`);
     });
 
     debugMode = new DebugMode(renderer, level);
