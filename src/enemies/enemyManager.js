@@ -13,7 +13,6 @@ export class EnemyManager {
     const roomId = `${room.posX},${room.posZ}`;
     
     const availableTiles = this.getAvailableSpawnTiles(room);
-    console.log(`   Found ${availableTiles.length} available tiles`);
     
     let spawnedCount = 0;
     
@@ -27,7 +26,6 @@ export class EnemyManager {
       }
     }
     
-    console.log(`✅ Spawned ${spawnedCount} enemies in room ${roomId}`);
   }
 
   // Обновление всех врагов

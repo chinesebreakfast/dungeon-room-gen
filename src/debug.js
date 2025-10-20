@@ -1,17 +1,24 @@
+// debug.js
 export class DebugMode {
   constructor(renderer, level) {
     this.renderer = renderer;
     this.level = level;
     this.isEnabled = false;
     this.debugMeshes = [];
+    this.enemyNavigation = null;
     
     this.setupEventListeners();
+  }
+
+  setEnemyNavigation(navigation) {
+    this.enemyNavigation = navigation;
   }
 
   enable() {
     this.isEnabled = true;
     console.log("🔧 Debug mode ENABLED - click on cells to see coordinates");
-    this.addDebugGrid();
+    this.removeDebugGrid(); // Сначала очищаем
+    this.highlightWalkableCells(); // ТОЛЬКО заливаем проходимые клетки
   }
 
   disable() {
@@ -29,14 +36,11 @@ export class DebugMode {
   }
 
   setupEventListeners() {
-    // Клик по canvas для получения координат
     this.renderer.canvas.addEventListener('click', (event) => {
       if (!this.isEnabled) return;
-      
       this.handleCanvasClick(event);
     });
 
-    // Клавиша D для включения/выключения дебага
     document.addEventListener('keydown', (event) => {
       if (event.key === 'd' || event.key === 'D') {
         this.toggle();
@@ -45,12 +49,10 @@ export class DebugMode {
   }
 
   handleCanvasClick(event) {
-    // Получаем координаты клика
     const rect = this.renderer.canvas.getBoundingClientRect();
     const x = event.clientX - rect.left;
     const y = event.clientY - rect.top;
 
-    // Конвертируем в мировые координаты
     const pickResult = this.renderer.scene.pick(x, y);
     
     if (pickResult.hit) {
@@ -61,22 +63,16 @@ export class DebugMode {
 
   getCellCoordinates(worldPos) {
     const tileSize = this.renderer.tileSize;
-    
-    // Конвертируем мировые координаты в координаты сетки
     const gridX = Math.floor(worldPos.x / tileSize);
     const gridZ = Math.floor(worldPos.z / tileSize);
     
     console.log(`📍 Cell coordinates: (${gridX}, ${gridZ})`);
     
-    // Показываем информацию о тайле на этой позиции
     this.showTileInfo(gridX, gridZ);
-    
-    // Визуально выделяем ячейку
     this.highlightCell(gridX, gridZ);
   }
 
   showTileInfo(x, z) {
-    // Ищем тайл в комнатах уровня
     let tileInfo = null;
     
     for (const room of this.level.rooms) {
@@ -100,22 +96,28 @@ export class DebugMode {
     } else {
       console.log(`❌ No tile at (${x}, ${z}) - empty cell`);
     }
+
+    if (this.enemyNavigation) {
+      const isWalkable = this.enemyNavigation.isWalkable(x, z);
+      console.log(`🚶 Walkable: ${isWalkable ? 'YES 🟢' : 'NO 🔴'}`);
+    }
   }
 
   highlightCell(x, z) {
-    // Убираем предыдущие выделения
-    this.removeDebugGrid();
+    // Удаляем только временные выделения, но не проходимые клетки
+    const tempMeshes = this.debugMeshes.filter(mesh => mesh.name === "debugHighlight");
+    tempMeshes.forEach(mesh => mesh.dispose());
+    this.debugMeshes = this.debugMeshes.filter(mesh => mesh.name !== "debugHighlight");
     
-    // Создаем красную рамку вокруг ячейки
     const tileSize = this.renderer.tileSize;
-    const color = new BABYLON.Color3(1, 0, 0); // Красный
+    const color = new BABYLON.Color3(1, 0, 0);
     
     const points = [
       new BABYLON.Vector3(x * tileSize, 0.1, z * tileSize),
       new BABYLON.Vector3((x + 1) * tileSize, 0.1, z * tileSize),
       new BABYLON.Vector3((x + 1) * tileSize, 0.1, (z + 1) * tileSize),
       new BABYLON.Vector3(x * tileSize, 0.1, (z + 1) * tileSize),
-      new BABYLON.Vector3(x * tileSize, 0.1, z * tileSize) // Замыкаем
+      new BABYLON.Vector3(x * tileSize, 0.1, z * tileSize)
     ];
     
     const highlight = BABYLON.MeshBuilder.CreateLines("debugHighlight", {
@@ -125,7 +127,6 @@ export class DebugMode {
     
     this.debugMeshes.push(highlight);
     
-    // Автоматическое удаление через 2 секунды
     setTimeout(() => {
       const index = this.debugMeshes.indexOf(highlight);
       if (index > -1) {
@@ -135,34 +136,40 @@ export class DebugMode {
     }, 2000);
   }
 
-  addDebugGrid() {
-    // Добавляем полупрозрачную сетку для дебага
-    const color = new BABYLON.Color3(0, 1, 0); // Зеленый
-    const alpha = 0.3;
-    
-    for (let x = 0; x <= this.level.gridSize; x++) {
-      for (let z = 0; z <= this.level.gridSize; z++) {
-        const points = [
-          new BABYLON.Vector3(x * this.renderer.tileSize, 0.05, z * this.renderer.tileSize),
-          new BABYLON.Vector3((x + 1) * this.renderer.tileSize, 0.05, z * this.renderer.tileSize),
-          new BABYLON.Vector3((x + 1) * this.renderer.tileSize, 0.05, (z + 1) * this.renderer.tileSize),
-          new BABYLON.Vector3(x * this.renderer.tileSize, 0.05, (z + 1) * this.renderer.tileSize)
-        ];
-        
-        const cell = BABYLON.MeshBuilder.CreateLines(`debugGrid_${x}_${z}`, {
-          points: points
-        }, this.renderer.scene);
-        
-        cell.color = color;
-        this.debugMeshes.push(cell);
-      }
+  highlightWalkableCells() {
+    if (!this.enemyNavigation) {
+      console.warn("⚠️ EnemyNavigation not set for debug mode");
+      return;
     }
+
+    const walkableCells = this.enemyNavigation.getWalkableCells();
+    const tileSize = this.renderer.tileSize;
     
-    console.log(`📐 Debug grid added for ${this.level.gridSize}x${this.level.gridSize} level`);
+    walkableCells.forEach(cell => {
+      // Создаем ЗАЛИТЫЙ квадрат вместо линий
+      const plane = BABYLON.MeshBuilder.CreatePlane(`walkable_${cell.x}_${cell.z}`, {
+        size: tileSize * 0.9 // Чуть меньше чем клетка
+      }, this.renderer.scene);
+      
+      plane.position.x = cell.x * tileSize + tileSize / 2;
+      plane.position.z = cell.z * tileSize + tileSize / 2;
+      plane.position.y = 0.01;
+      plane.rotation.x = Math.PI / 2; // Горизонтально
+      
+      // Зеленый материал с прозрачностью
+      const material = new BABYLON.StandardMaterial("walkable_mat", this.renderer.scene);
+      material.diffuseColor = new BABYLON.Color3(0, 1, 0);
+      material.alpha = 0.3;
+      material.specularColor = new BABYLON.Color3(0, 0, 0);
+      
+      plane.material = material;
+      this.debugMeshes.push(plane);
+    });
+
+    console.log(`🟢 Highlighted ${walkableCells.length} walkable cells`);
   }
 
   removeDebugGrid() {
-    // Убираем все дебаг-меши
     this.debugMeshes.forEach(mesh => {
       mesh.dispose();
     });

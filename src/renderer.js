@@ -256,7 +256,7 @@ export class Renderer {
       // 🔥 ВЫЧИСЛЯЕМ ФИНАЛЬНЫЙ ПОВОРОТ
       let finalRotation = rotation;
       if (type === 'wall_to_tunnel' && side) {
-        if (side === 'south' || side === 'east') {
+        if (side === 'north' || side === 'west') {
           finalRotation = rotation + Math.PI;
         }
       }
@@ -270,11 +270,6 @@ export class Renderer {
       mesh.rotation = BABYLON.Vector3.Zero();
       
       this.tileMeshes.push(newContainer);
-      
-      // 🔥 ДЕБАГ ПОВОРОТОВ
-      if (type === 'wall' && (rotation === Math.PI/2 || rotation === 0)) {
-        console.log(`🧱 Wall at (${x},${z}) side:${side} rotation:${finalRotation.toFixed(2)}rad (${(finalRotation * 180/Math.PI).toFixed(0)}°)`);
-      }
       
     } catch (error) {
       console.error(`Failed to load ${type}:`, error);

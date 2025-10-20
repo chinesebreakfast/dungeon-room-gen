@@ -4,6 +4,7 @@ import { Level } from "./level.js";
 import { DebugMode } from "./debug.js";
 import { EnemyManager } from './enemies/enemyManager.js';
 import { EnemyRenderer } from './enemies/enemyRenderer.js';
+import { EnemyNavigation } from "./enemies/enemyNavigation.js";
 
 window.addEventListener("DOMContentLoaded", () => {
   const renderer = new Renderer("renderCanvas");
@@ -11,6 +12,7 @@ window.addEventListener("DOMContentLoaded", () => {
 
   let enemyManager = null;
   let enemyRenderer = null;
+  let enemyNavigation = null;
 
   async function generateLevel() {
     const level = new Level(0, 30);
@@ -18,6 +20,7 @@ window.addEventListener("DOMContentLoaded", () => {
 
     enemyManager = new EnemyManager(level);
     enemyRenderer = new EnemyRenderer(renderer.scene, "./assets/enemy/");
+    enemyNavigation = new EnemyNavigation(level);
 
     // Спавн врагов в комнатах
     level.rooms.forEach(room => {
@@ -45,6 +48,7 @@ window.addEventListener("DOMContentLoaded", () => {
     });
 
     debugMode = new DebugMode(renderer, level);
+    debugMode.setEnemyNavigation(enemyNavigation);
   }
   function startEnemyUpdateLoop() {
     function updateLoop() {
