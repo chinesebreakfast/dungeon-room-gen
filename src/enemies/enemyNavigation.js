@@ -46,15 +46,22 @@ export class EnemyNavigation {
 
   getWalkableNeighbors(x, z) {
     const neighbors = [];
-    const directions = [[0,1], [1,0], [0,-1], [-1,0]]; // N,E,S,W
-
-    directions.forEach(([dx, dz]) => {
-      const nx = x + dx, nz = z + dz;
-      if (this.isWalkable(nx, nz)) {
-        neighbors.push({x: nx, z: nz});
+    const directions = [
+      { dx: 0, dz: -1 },  // север
+      { dx: 1, dz: 0 },   // восток  
+      { dx: 0, dz: 1 },   // юг
+      { dx: -1, dz: 0 }   // запад
+    ];
+    
+    directions.forEach(dir => {
+      const newX = x + dir.dx;
+      const newZ = z + dir.dz;
+      
+      if (this.isWalkable(newX, newZ)) {
+        neighbors.push({ x: newX, z: newZ });
       }
     });
-
+    
     return neighbors;
   }
 

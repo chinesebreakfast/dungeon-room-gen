@@ -3,9 +3,11 @@ import { Enemy } from './enemy.js';
 import { ENEMY_TYPES } from './enemyTypes.js';
 
 export class EnemyManager {
-  constructor() {
+  constructor(navigation) {
     this.enemies = new Map(); // enemyId -> Enemy
     this.lastUpdateTime = Date.now();
+    this.navigation = navigation;
+
   }
 
   // Генерация врагов для комнаты
@@ -19,7 +21,7 @@ export class EnemyManager {
     for (const tile of availableTiles) {
       if (Math.random() < this.getSpawnProbability()) {
         const enemyType = this.selectRandomEnemyType();
-        const enemy = new Enemy(enemyType, tile.x, tile.z, room);
+        const enemy = new Enemy(enemyType, tile.x, tile.z, room, this.navigation);
         this.enemies.set(enemy.id, enemy);
         spawnedCount++;
         
@@ -98,4 +100,9 @@ export class EnemyManager {
     this.enemies.clear();
     console.log('🧹 Cleared all enemies');
   }
+
+  getEnemyAIDebugInfo(enemyId) {
+  const enemy = this.enemies.get(enemyId);
+  return enemy ? enemy.getAIDebugInfo() : null;
+}
 }

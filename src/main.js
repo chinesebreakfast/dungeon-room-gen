@@ -18,9 +18,12 @@ window.addEventListener("DOMContentLoaded", () => {
     const level = new Level(0, 30);
     level.generateRooms();
 
-    enemyManager = new EnemyManager(level);
-    enemyRenderer = new EnemyRenderer(renderer.scene, "./assets/enemy/");
+    
     enemyNavigation = new EnemyNavigation(level);
+    enemyRenderer = new EnemyRenderer(renderer.scene, "./assets/enemy/");
+    enemyManager = new EnemyManager(enemyNavigation);
+    await enemyRenderer.preloadEnemyTypes();
+    
 
     // Спавн врагов в комнатах
     level.rooms.forEach(room => {
@@ -33,6 +36,7 @@ window.addEventListener("DOMContentLoaded", () => {
 
     const enemiesData = enemyManager.getAllEnemiesForRender();
     await enemyRenderer.renderEnemies(enemiesData, enemyManager);
+    enemyRenderer.debugEnemyPositions();
 
     startEnemyUpdateLoop();
     // Отладочная информация
@@ -49,6 +53,7 @@ window.addEventListener("DOMContentLoaded", () => {
 
     debugMode = new DebugMode(renderer, level);
     debugMode.setEnemyNavigation(enemyNavigation);
+    debugMode.setEnemyManager(enemyManager);
   }
   function startEnemyUpdateLoop() {
     function updateLoop() {
